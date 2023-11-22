@@ -1,0 +1,65 @@
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <SoftwareSerial.h>
+
+// WiFi credentials
+const char* ssid = "ssid";
+const char* password = "password";
+
+// MQTT Broker settings
+const char* mqtt_server = "broker_address";
+const char* mqtt_client_id = "mqtt_client_id";
+const char* mqtt_user = "mqtt_user";
+const char* mqtt_password = "mqtt_password";
+
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
+
+SoftwareSerial HC12(D4, D5); // RX, TX
+
+void setup_wifi() {
+    delay(10);
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+    }
+}
+
+void reconnectMQTT() {
+    while (!mqttClient.connected()) {
+        if (mqttClient.connect(mqtt_client_id, mqtt_user, mqtt_password)) {
+            // Connected to MQTT Broker
+        } else {
+            delay(5000); // Wait before retrying
+        }
+    }
+}
+
+void setup() {
+    Serial.begin(9600); // Start the built-in serial port, for debugging
+    HC12.begin(9600); // HC12 default baud rate
+    setup_wifi();
+    mqttClient.setServer(mqtt_server, 1883);
+
+    Serial.println("Setup complete. Listening for HC12 data...");
+}
+
+void loop() {
+    if (!mqttClient.connected()) {
+        reconnectMQTT();
+    }
+    mqttClient.loop();
+
+    // Check if data is available from HC12 and forward it to MQTT
+    if (HC12.available() > 0) {
+        String message = HC12.readStringUntil('\n');
+        int separatorIndex = message.indexOf(':');
+        if (separatorIndex != -1) {
+            String topic = message.substring(0, separatorIndex);
+            String sensorData = message.substring(separatorIndex + 1);
+
+            mqttClient.publish(topic.c_str(), sensorData.c_str());
+            Serial.println("Published to " + topic + ": " + sensorData);
+        }
+    }
+}
