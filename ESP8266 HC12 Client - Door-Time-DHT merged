@@ -1,0 +1,122 @@
+#include <DHT.h>
+#include <SoftwareSerial.h>
+#include <TimeLib.h>
+
+// DHT Sensor Settings
+#define DHTPIN D1       // Pin where the DHT22 is connected
+#define DHTTYPE DHT22   // DHT22 type
+DHT dht(DHTPIN, DHTTYPE);
+
+// HC12 Settings
+#define HC12_RX D4  // Connect to HC12 TX
+#define HC12_TX D5  // Connect to HC12 RX
+SoftwareSerial HC12(HC12_RX, HC12_TX);
+
+// Door Control Pins
+#define DOOR_OPEN_PIN D2
+#define DOOR_CLOSE_PIN D3
+
+// Time Printing Interval
+unsigned long lastTimePrint = 0;
+const long printInterval = 5000; // Interval for printing time (5 seconds)
+
+void setup() {
+    Serial.begin(9600); // Start the serial communication
+    HC12.begin(9600);   // Start HC12 communication
+    dht.begin();        // Start the DHT sensor
+
+    pinMode(DOOR_OPEN_PIN, OUTPUT); // Set the door control pins as output
+    pinMode(DOOR_CLOSE_PIN, OUTPUT);
+
+    Serial.println("Setup complete."); // Indicate that setup is complete
+}
+
+void loop() {
+    // Read sensor data and send it via HC12
+    readAndSendSensorData();
+
+    // Handle incoming messages from HC12
+    handleHC12Communication();
+
+    // Print the current time at regular intervals
+    printCurrentTime();
+}
+
+void readAndSendSensorData() {
+    // Read humidity and temperature from the DHT sensor
+    float humidity = dht.readHumidity();
+    float temperature = dht.readTemperature();
+
+    // Check if the readings are valid
+    if (isnan(humidity) || isnan(temperature)) {
+        Serial.println("Failed to read from DHT sensor!");
+        return;
+    }
+
+    // Prepare strings with sensor data
+    char tempString[40];
+    char humString[40];
+    snprintf(tempString, sizeof(tempString), "COOP/sensor/temperature:%05.2f", temperature);
+    snprintf(humString, sizeof(humString), "COOP/sensor/humidity:%05.2f", humidity);
+
+    // Send sensor data via HC12
+    HC12.println(tempString);
+    HC12.println(humString);
+
+    // Debugging output
+    Serial.println(tempString);
+    Serial.println(humString);
+
+    // Delay between readings
+    delay(10000);
+}
+
+void handleHC12Communication() {
+    if (HC12.available() > 0) {
+        String message = HC12.readStringUntil('\n');
+        message.trim();
+
+        Serial.print("Message received: ");
+        Serial.println(message);
+
+        // Handle door open/close commands
+        if (message == "COOP_OPEN") {
+            operateDoor(DOOR_OPEN_PIN, "Door opened.");
+        } else if (message == "COOP_CLOSE") {
+            operateDoor(DOOR_CLOSE_PIN, "Door closed.");
+        } else if (isTimeMessage(message)) {
+            setTimeFromString(message);
+        }
+    }
+}
+
+void printCurrentTime() {
+    if (millis() - lastTimePrint >= printInterval) {
+        lastTimePrint = millis();
+        char timeStr[9];
+        sprintf(timeStr, "%02d:%02d:%02d", hour(), minute(), second());
+        Serial.print("Current time: ");
+        Serial.println(timeStr);
+    }
+}
+
+void operateDoor(int pin, const char* action) {
+    digitalWrite(pin, HIGH);
+    delay(1000); // Adjust this delay as needed
+    digitalWrite(pin, LOW);
+    Serial.println(action);
+}
+
+bool isTimeMessage(const String& message) {
+    return message.length() == 8 && message.indexOf(":") == 2 && message.lastIndexOf(":") == 5;
+}
+
+void setTimeFromString(const String& timeStr) {
+    int hourVal = timeStr.substring(0, 2).toInt();
+    int minuteVal = timeStr.substring(3, 5).toInt();
+    int secondVal = timeStr.substring(6, 8).toInt();
+
+    setTime(hourVal, minuteVal, secondVal, day(), month(), year());
+    Serial.print("Time set to: ");
+    Serial.println(timeStr);
+}
