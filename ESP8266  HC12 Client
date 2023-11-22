@@ -1,0 +1,43 @@
+#include <DHT.h>
+#include <SoftwareSerial.h>
+
+#define DHTPIN D1       // DHT22 on pin D1
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+SoftwareSerial HC12(D4, D5); // RX, TX
+
+void setup() {
+    HC12.begin(9600); // HC12 default baud rate
+    dht.begin();
+
+    Serial.begin(9600); // For debugging purposes
+}
+
+void loop() {
+    // Read sensor data
+    float humidity = dht.readHumidity();
+    float temperature = dht.readTemperature();
+
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(humidity) || isnan(temperature)) {
+        Serial.println("Failed to read from DHT sensor!");
+        return;
+    }
+
+    // Format sensor data strings with two decimal places
+    char tempString[40];
+    char humString[40];
+    snprintf(tempString, sizeof(tempString), "COOP/sensor/temperature:%05.2f", temperature);
+    snprintf(humString, sizeof(humString), "COOP/sensor/humidity:%05.2f", humidity);
+
+    // Send sensor data to HC12
+    HC12.println(tempString);
+    HC12.println(humString);
+
+    // For debugging
+    Serial.println(tempString);
+    Serial.println(humString);
+
+    delay(2000); // Delay between readings
+}
