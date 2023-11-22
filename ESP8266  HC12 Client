@@ -39,5 +39,5 @@ void loop() {
     Serial.println(tempString);
     Serial.println(humString);
 
-    delay(2000); // Delay between readings
+    delay(10000); // Delay between readings
 }
