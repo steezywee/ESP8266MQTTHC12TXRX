@@ -1,0 +1,80 @@
+#include <SoftwareSerial.h>
+#include <TimeLib.h>
+
+#define HC12_RX D4  // Connect to HC12 TX
+#define HC12_TX D5  // Connect to HC12 RX
+
+// Define pins for door control
+#define DOOR_OPEN_PIN D1
+#define DOOR_CLOSE_PIN D2
+
+SoftwareSerial HC12(HC12_RX, HC12_TX); // RX, TX
+
+unsigned long lastTimePrint = 0;
+const long printInterval = 5000; // 5 seconds
+
+void setup() {
+    Serial.begin(9600); 
+    HC12.begin(9600); 
+
+    pinMode(DOOR_OPEN_PIN, OUTPUT);
+    pinMode(DOOR_CLOSE_PIN, OUTPUT);
+
+    Serial.println("Setup complete. Listening for HC12 data...");
+}
+
+void loop() {
+    if (HC12.available() > 0) {
+        String message = HC12.readStringUntil('\n');
+        message.trim();  
+
+        Serial.print("Message received: ");
+        Serial.println(message);
+
+        // Check for door commands
+        if (message == "COOP_OPEN") {
+            Serial.println("COOP_OPEN command received."); // Print when COOP_OPEN command is received
+
+            digitalWrite(DOOR_OPEN_PIN, HIGH);
+            delay(1000); // Adjust this delay as needed
+            digitalWrite(DOOR_OPEN_PIN, LOW);
+
+            Serial.println("Door opened.");  // Print message when the door is opened
+        } else if (message == "COOP_CLOSE") {
+            Serial.println("COOP_CLOSE command received."); // Print when COOP_CLOSE command is received
+
+            digitalWrite(DOOR_CLOSE_PIN, HIGH);
+            delay(1000); // Adjust this delay as needed
+            digitalWrite(DOOR_CLOSE_PIN, LOW);
+
+            Serial.println("Door closed.");  // Print message when the door is closed
+        }
+
+        // Check if the message is a time string (e.g., "HH:MM:SS")
+        else if (message.length() == 8 && message.indexOf(":") == 2 && message.lastIndexOf(":") == 5) {
+            setTimeFromString(message);
+        }
+    }
+
+    // Print the current time every 5 seconds
+    if (millis() - lastTimePrint >= printInterval) {
+        lastTimePrint = millis();
+        
+        // Format the current time
+        char timeStr[9];
+        sprintf(timeStr, "%02d:%02d:%02d", hour(), minute(), second());
+        
+        Serial.print("Current time: ");
+        Serial.println(timeStr);
+    }
+}
+
+void setTimeFromString(const String& timeStr) {
+    int hourVal = timeStr.substring(0, 2).toInt();
+    int minuteVal = timeStr.substring(3, 5).toInt();
+    int secondVal = timeStr.substring(6, 8).toInt();
+
+    setTime(hourVal, minuteVal, secondVal, day(), month(), year());
+    Serial.print("Time set to: ");
+    Serial.println(timeStr);
+}
