@@ -1,0 +1,129 @@
+#include <SoftwareSerial.h>
+#include <TimeLib.h>
+
+// HC12 Pins
+const int HC12RxPin = D4; // RX Pin
+const int HC12TxPin = D5; // TX Pin
+
+// Door Control Pins
+const int doorOpenPin = D2;
+const int doorClosePin = D3;
+
+SoftwareSerial HC12(HC12RxPin, HC12TxPin);
+
+// Store door open/close times
+int openHour = 8;
+int openMinute = 0;
+int closeHour = 18;
+int closeMinute = 0;
+
+bool doorOpened = false;
+bool doorClosed = false;
+
+void setup() {
+    Serial.begin(9600);
+    HC12.begin(9600);
+
+    pinMode(doorOpenPin, OUTPUT);
+    pinMode(doorClosePin, OUTPUT);
+
+    setTime(8, 0, 0, 1, 1, 2020); // Initial time set to 8:00 AM
+}
+
+void loop() {
+    if (HC12.available()) {
+        String message = HC12.readStringUntil('\n');
+        message.trim(); // Trim whitespace and newline characters
+
+        Serial.print("Received: ");
+        Serial.println(message);
+
+        if (message.startsWith("COOP_SET_OPEN:")) {
+            handleTimeUpdate(message.substring(14), true);
+        } else if (message.startsWith("COOP_SET_CLOSE:")) {
+            handleTimeUpdate(message.substring(15), false);
+        } else if (message.startsWith("TIME:")) {
+            updateCurrentTime(message.substring(5));
+        } else if (message == "COOP_OPEN") {
+            operateDoor(doorOpenPin, "Door Opened Manually");
+        } else if (message == "COOP_CLOSE") {
+            operateDoor(doorClosePin, "Door Closed Manually");
+        }
+    }
+
+    // Automatic door control - with minute range check
+    if (hour() == openHour && minute() == openMinute && !doorOpened) {
+        operateDoor(doorOpenPin, "Door Opened Automatically");
+        doorOpened = true;
+        doorClosed = false;
+    } else if (hour() == closeHour && minute() == closeMinute && !doorClosed) {
+        operateDoor(doorClosePin, "Door Closed Automatically");
+        doorClosed = true;
+        doorOpened = false;
+    }
+
+    // Reset flags if current time is not equal to open/close time
+    if (!(hour() == openHour && minute() == openMinute)) {
+        doorOpened = false;
+    }
+    if (!(hour() == closeHour && minute() == closeMinute)) {
+        doorClosed = false;
+    }
+
+    static unsigned long lastPrint = 0;
+    if (millis() - lastPrint >= 5000) {
+        lastPrint = millis();
+        Serial.print("Current Time: ");
+        printTwoDigits(hour());
+        Serial.print(":");
+        printTwoDigits(minute());
+        Serial.println();
+    }
+}
+
+void handleTimeUpdate(String timeStr, bool isOpenTime) {
+    int colonIndex = timeStr.indexOf(':');
+    int hourVal = timeStr.substring(0, colonIndex).toInt();
+    int minuteVal = timeStr.substring(colonIndex + 1).toInt();
+
+    if (isOpenTime) {
+        openHour = hourVal;
+        openMinute = minuteVal;
+        Serial.print("New Open Time: ");
+    } else {
+        closeHour = hourVal;
+        closeMinute = minuteVal;
+        Serial.print("New Close Time: ");
+    }
+
+    printTwoDigits(hourVal);
+    Serial.print(":");
+    printTwoDigits(minuteVal);
+    Serial.println();
+}
+
+void updateCurrentTime(String timeStr) {
+    int hourVal = timeStr.substring(0, 2).toInt();
+    int minuteVal = timeStr.substring(3, 5).toInt();
+    setTime(hourVal, minuteVal, 0, day(), month(), year());
+
+    Serial.print("Time Updated: ");
+    printTwoDigits(hourVal);
+    Serial.print(":");
+    printTwoDigits(minuteVal);
+    Serial.println();
+}
+
+void printTwoDigits(int number) {
+    if (number < 10) {
+        Serial.print("0"); // Print a leading zero if the number is less than 10
+    }
+    Serial.print(number);
+}
+
+void operateDoor(int pin, String action) {
+    digitalWrite(pin, HIGH);
+    delay(1000); // Assume it takes 1 second to open/close
+    digitalWrite(pin, LOW);
+    Serial.println(action);
+}
